@@ -11,7 +11,7 @@ Nine specialized agents with strict role separation. Only the Final Checker can 
 | Bot | Role | Key Rules |
 |-----|------|-----------|
 | Pulse Scout | Discovery | Finds new Solana pairs / volume spikes |
-| Forge Filter | Risk Gate | Rug checks (InsightX, Bubblemaps, DexScanner, RugCheck), holder concentration, wallet quality |
+| Forge Filter | Risk Gate | Rug checks (InsightX, Bubblemaps, DexScanner, RugCheck), holder concentration, wallet quality, **GMGN-style smart-money / whale cluster detection** |
 | Echo Sentinel | News Radar | X / news sentiment, kill switch on high-impact negative events |
 | Thesis Weaver | Analysis | Structured thesis only (action, entry, stop, target, invalidation). Never sizes. |
 | Atlas Chart | Technicals | Indicators for tokens with ≥30 days history |
@@ -28,6 +28,23 @@ Bots write and read shared JSONL files so they do not have to wait for chat mess
 - `/workspace/afterglow/trades.jsonl` (closed trades + scores)
 - `/workspace/afterglow/prompts/` (versioned prompts + win-rate metadata)
 - Additional files per bot
+
+### Filter status schema extension (whale / smart-money)
+Each filter result should include:
+```json
+{
+  "token": "...",
+  "rug_score": 0-100,
+  "wallet_quality": "pass|fail|caution",
+  "smart_money_cluster": {
+    "wallets_buying": 0,
+    "same_block_or_window": true/false,
+    "top_wallets_selling": true/false,
+    "source": "gmgn|fallback|none"
+  },
+  "verdict": "pass|reject|review"
+}
+```
 
 ## Hard Risk Rules
 - Maximum position size: 8% of stack
@@ -56,6 +73,18 @@ Inspired by closed-loop grading + coaching patterns, implemented safely for pape
 
 The loop never changes the scoring rubric or any hard risk limits.
 
+## Whale / Smart-Money Cluster Detection (Forge Filter)
+
+Added as a non-blocking enrichment on top of existing rug and wallet-quality checks (does **not** override hard risk rules):
+
+- Prefer GMGN Skills / GMGN OpenAPI (or equivalent public feeds) for smart-money and whale labels.
+- Flag a positive cluster when ≥3 labeled smart-money or high-PnL wallets buy the same token within a short window (same block or ≤2 minutes).
+- Flag a negative signal when top holders or previously-buying smart-money wallets begin unloading.
+- Down-score or reject if a large portion of top holders show negative recent realized PnL (existing wallet-quality rule).
+- Fallback: if GMGN unavailable, use public holder lists + basic clustering heuristics or skip the signal (never block solely on missing data).
+- All signals are written to the shared filter status file for Gatekeeper and Afterglow to consume.
+- Afterglow scores the quality of these signals in post-trade review; weak or noisy signals can be tuned via the proposal loop.
+
 ## Current Mode
 - 7-day paper validation running on a $10,000 virtual stack
 - Live trading and autonomous mode are disabled
@@ -75,6 +104,7 @@ This is an open architecture. Contributions welcome for:
 - Execution safety improvements
 - Dashboard enhancements
 - Refined Afterglow scoring rubrics or proposal formats
+- Improved GMGN or alternative smart-money data integrations
 
 Please open an issue or PR. All changes should preserve the strict role separation, paper-mode default, and immutable hard risk rules.
 
