@@ -17,7 +17,7 @@ Nine specialized agents with strict role separation. Only the Final Checker can 
 | Atlas Chart | Technicals | Indicators for tokens with ≥30 days history |
 | Aegis Risk | Capital Shield | Max 8% position, independent 2R minimum, post-stop cooldowns, daily loss limit |
 | Gatekeeper | Final Gate | Consensus check across all bots before any trade |
-| Afterglow | Post-Trade | Analyzes closed trades and suggests improvements |
+| Afterglow | Post-Trade + Self-Improve | Grades closed trades, proposes prompt diffs for non-risk bots, versions with rollback. Human review required. |
 | Vector | Execution | Jupiter swaps (paper by default). Network health gate prepared. |
 
 ## Shared Status Files
@@ -25,6 +25,8 @@ Nine specialized agents with strict role separation. Only the Final Checker can 
 Bots write and read shared JSONL files so they do not have to wait for chat messages:
 - `/workspace/filter/latest.jsonl`
 - `/workspace/risk/latest.jsonl`
+- `/workspace/afterglow/trades.jsonl` (closed trades + scores)
+- `/workspace/afterglow/prompts/` (versioned prompts + win-rate metadata)
 - Additional files per bot
 
 ## Hard Risk Rules
@@ -34,6 +36,25 @@ Bots write and read shared JSONL files so they do not have to wait for chat mess
 - No averaging down
 - Post-stop cooldown: 20 min same token + 5 min global
 - Daily loss limit and kill switch from negative news
+
+**These rules are immutable.** Afterglow may never auto-edit Aegis Risk, Gatekeeper, or Vector risk/execution limits.
+
+## Self-Improvement Loop (Afterglow)
+
+Inspired by closed-loop grading + coaching patterns, implemented safely for paper trading:
+
+1. After every closed paper trade, Afterglow scores it 0–1 on a fixed rubric:
+   - Followed the plan / consensus
+   - Size within hard limits
+   - Exited on time (stop / target / invalidation)
+   - Did not chase
+   - Process quality (separate from raw P&L)
+2. Score < 0.9 → Coach proposes a 1–2 line prompt rewrite **only** for Scout, Filter, Echo Sentinel, Thesis Weaver, or Atlas Chart.
+3. Proposed changes are written to `/workspace/afterglow/proposals/` and require explicit human approval before any prompt is updated.
+4. Every approved prompt version is stored with its associated paper win rate / expectancy. If a new version underperforms the previous on a rolling window of trades, Afterglow recommends rollback.
+5. Morning report: paper balance, win rate, expectancy, and the 3 biggest proposed (or applied) prompt changes.
+
+The loop never changes the scoring rubric or any hard risk limits.
 
 ## Current Mode
 - 7-day paper validation running on a $10,000 virtual stack
@@ -53,7 +74,8 @@ This is an open architecture. Contributions welcome for:
 - Improved news sentiment scoring
 - Execution safety improvements
 - Dashboard enhancements
+- Refined Afterglow scoring rubrics or proposal formats
 
-Please open an issue or PR. All changes should preserve the strict role separation and paper-mode default.
+Please open an issue or PR. All changes should preserve the strict role separation, paper-mode default, and immutable hard risk rules.
 
 **Disclaimer:** Trading cryptocurrencies involves substantial risk of loss. This system is for research and paper trading only unless you explicitly enable live mode with your own funds and accept total loss risk.
